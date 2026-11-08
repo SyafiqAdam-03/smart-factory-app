@@ -9,6 +9,7 @@ import 'package:smart_factory_qc/data/dummy_data.dart';
 import 'package:smart_factory_qc/domain/models/inventory.dart';
 import 'package:smart_factory_qc/domain/stock_calculator.dart';
 import 'package:smart_factory_qc/features/shared/providers/app_state.dart';
+import 'package:smart_factory_qc/features/shared/widgets/async_collection_states.dart';
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -17,8 +18,6 @@ class InventoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(inventoryFilterProvider);
     final items = ref.watch(filteredInventoryProvider);
-    final lowCount =
-        items.where((item) => isLowStock(item, DummyData.stockLevels)).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -83,35 +82,51 @@ class InventoryScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.s8),
-                Text(
-                  '${items.length} items • $lowCount at or below reorder level',
-                  style: AppTextStyles.caption.copyWith(fontSize: 12),
-                ),
               ],
             ),
           ),
           Expanded(
-            child: items.isEmpty
-                ? const Center(
-                    child: Text('No inventory items match.',
-                        style: AppTextStyles.caption),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.s16,
-                      AppSpacing.s8,
-                      AppSpacing.s16,
-                      AppSpacing.s16,
-                    ),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.s12),
-                    itemBuilder: (context, index) => _InventoryCard(
-                      item: items[index],
-                      levels: DummyData.stockLevels,
-                    ),
+            child: items.when(
+              loading: () => const CollectionLoadingState(feature: 'inventory'),
+              error: (error, stackTrace) => CollectionErrorState(
+                feature: 'inventory',
+                onRetry: () => ref.read(inventoryProvider.notifier).fetch(),
+              ),
+              data: (records) {
+                if (records.isEmpty) {
+                  final noFilters =
+                      filter.query.isEmpty && !filter.lowStockOnly;
+                  return CollectionEmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: noFilters
+                        ? 'No inventory items yet'
+                        : 'No matching items',
+                    description: noFilters
+                        ? 'Materials will appear here after your first delivery is received and recorded.'
+                        : 'Try a different search or filter. Matching materials will appear here.',
+                    actionLabel: 'Refresh',
+                    footer: 'Showing all records • Assembly plant 01',
+                    onAction: () =>
+                        ref.read(inventoryProvider.notifier).fetch(),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s16,
+                    AppSpacing.s8,
+                    AppSpacing.s16,
+                    AppSpacing.s16,
                   ),
+                  itemCount: records.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.s12),
+                  itemBuilder: (context, index) => _InventoryCard(
+                    item: records[index],
+                    levels: DummyData.stockLevels,
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -146,7 +161,7 @@ class _InventoryFilterChip extends StatelessWidget {
         selectedColor: AppColors.navy,
         side: BorderSide(color: selected ? AppColors.navy : AppColors.slate300),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderRadius: BorderRadius.circular(8),
         ),
       );
 }

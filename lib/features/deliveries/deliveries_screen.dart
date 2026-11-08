@@ -8,6 +8,7 @@ import 'package:smart_factory_qc/core/widgets/status_badge.dart';
 import 'package:smart_factory_qc/domain/models/delivery.dart';
 import 'package:smart_factory_qc/features/deliveries/delivery_detail_screen.dart';
 import 'package:smart_factory_qc/features/shared/providers/app_state.dart';
+import 'package:smart_factory_qc/features/shared/widgets/async_collection_states.dart';
 
 class DeliveriesScreen extends ConsumerWidget {
   const DeliveriesScreen({super.key});
@@ -16,8 +17,6 @@ class DeliveriesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(deliveryFilterProvider);
     final deliveries = ref.watch(filteredDeliveriesProvider);
-    final reviewCount =
-        deliveries.where((delivery) => delivery.needsReview).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -86,34 +85,51 @@ class DeliveriesScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.s8),
-                Text(
-                  '${deliveries.length} recent batches • '
-                  '$reviewCount deliveries to review today',
-                  style: AppTextStyles.caption.copyWith(fontSize: 12),
-                ),
               ],
             ),
           ),
           Expanded(
-            child: deliveries.isEmpty
-                ? const Center(
-                    child: Text('No deliveries match.',
-                        style: AppTextStyles.caption),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.s16,
-                      AppSpacing.s8,
-                      AppSpacing.s16,
-                      AppSpacing.s16,
-                    ),
-                    itemCount: deliveries.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.s12),
-                    itemBuilder: (context, index) =>
-                        _DeliveryCard(delivery: deliveries[index]),
+            child: deliveries.when(
+              loading: () =>
+                  const CollectionLoadingState(feature: 'deliveries'),
+              error: (error, stackTrace) => CollectionErrorState(
+                feature: 'deliveries',
+                onRetry: () => ref.read(deliveriesProvider.notifier).fetch(),
+              ),
+              data: (items) {
+                if (items.isEmpty) {
+                  final noFilters = filter.query.isEmpty &&
+                      filter.status == DeliveryStatusFilter.all &&
+                      !filter.needsReviewOnly;
+                  return CollectionEmptyState(
+                    icon: Icons.inbox_outlined,
+                    title: noFilters
+                        ? 'No deliveries today'
+                        : 'No matching deliveries',
+                    description: noFilters
+                        ? 'New incoming batches will appear here when receiving logs a delivery.'
+                        : 'Try a different search or filter. Matching deliveries will appear here.',
+                    actionLabel: 'Refresh',
+                    footer: 'Showing all records • Assembly plant 01',
+                    onAction: () =>
+                        ref.read(deliveriesProvider.notifier).fetch(),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.s16,
+                    AppSpacing.s8,
+                    AppSpacing.s16,
+                    AppSpacing.s16,
                   ),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.s12),
+                  itemBuilder: (context, index) =>
+                      _DeliveryCard(delivery: items[index]),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -148,7 +164,7 @@ class _StatusFilterChip extends StatelessWidget {
         selectedColor: AppColors.navy,
         side: BorderSide(color: selected ? AppColors.navy : AppColors.slate300),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderRadius: BorderRadius.circular(8),
         ),
       );
 }

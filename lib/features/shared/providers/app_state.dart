@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_factory_qc/app/sync_status.dart';
 import 'package:smart_factory_qc/data/dummy_data.dart';
 import 'package:smart_factory_qc/domain/models/activity_entry.dart';
 import 'package:smart_factory_qc/domain/models/audit_event.dart';
@@ -126,29 +127,68 @@ final deliveryFilterProvider =
   (ref) => DeliveryFilterController(),
 );
 
-final filteredDeliveriesProvider = Provider<List<Delivery>>((ref) {
+typedef DeliveryFetcher = Future<List<Delivery>> Function();
+
+final deliveryFetcherProvider = Provider<DeliveryFetcher>(
+  (ref) => () async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    return ref.read(deliveryRepositoryProvider);
+  },
+);
+
+final deliveriesProvider =
+    AsyncNotifierProvider<DeliveriesController, List<Delivery>>(
+  DeliveriesController.new,
+);
+
+class DeliveriesController extends AsyncNotifier<List<Delivery>> {
+  @override
+  Future<List<Delivery>> build() async {
+    final sync = ref.watch(syncStatusProvider);
+    if (sync.isOffline) {
+      throw StateError('Deliveries are unavailable while offline.');
+    }
+    ref.watch(deliveryRepositoryProvider);
+    return ref.watch(deliveryFetcherProvider)();
+  }
+
+  Future<void> fetch() async {
+    state = const AsyncLoading<List<Delivery>>();
+    final sync = ref.read(syncStatusProvider);
+    state = await AsyncValue.guard(() async {
+      if (sync.isOffline) {
+        throw StateError('Deliveries are unavailable while offline.');
+      }
+      return ref.read(deliveryFetcherProvider)();
+    });
+  }
+}
+
+final filteredDeliveriesProvider = Provider<AsyncValue<List<Delivery>>>((ref) {
   final filter = ref.watch(deliveryFilterProvider);
-  final records = ref.watch(deliveryRepositoryProvider);
   final query = filter.query.trim().toLowerCase();
-  return records.where((delivery) {
-    final matchesQuery = query.isEmpty ||
-        delivery.batchNumber.toLowerCase().contains(query) ||
-        delivery.supplier.toLowerCase().contains(query) ||
-        delivery.material.toLowerCase().contains(query) ||
-        delivery.materialCode.toLowerCase().contains(query);
-    final matchesStatus = filter.status == DeliveryStatusFilter.all ||
-        switch (filter.status) {
-          DeliveryStatusFilter.all => true,
-          DeliveryStatusFilter.passed => delivery.status == BatchStatus.passed,
-          DeliveryStatusFilter.quarantined =>
-            delivery.status == BatchStatus.quarantined,
-          DeliveryStatusFilter.released =>
-            delivery.status == BatchStatus.released,
-        };
-    return matchesQuery &&
-        matchesStatus &&
-        (!filter.needsReviewOnly || delivery.needsReview);
-  }).toList(growable: false);
+  return ref.watch(deliveriesProvider).whenData(
+        (records) => records.where((delivery) {
+          final matchesQuery = query.isEmpty ||
+              delivery.batchNumber.toLowerCase().contains(query) ||
+              delivery.supplier.toLowerCase().contains(query) ||
+              delivery.material.toLowerCase().contains(query) ||
+              delivery.materialCode.toLowerCase().contains(query);
+          final matchesStatus = filter.status == DeliveryStatusFilter.all ||
+              switch (filter.status) {
+                DeliveryStatusFilter.all => true,
+                DeliveryStatusFilter.passed =>
+                  delivery.status == BatchStatus.passed,
+                DeliveryStatusFilter.quarantined =>
+                  delivery.status == BatchStatus.quarantined,
+                DeliveryStatusFilter.released =>
+                  delivery.status == BatchStatus.released,
+              };
+          return matchesQuery &&
+              matchesStatus &&
+              (!filter.needsReviewOnly || delivery.needsReview);
+        }).toList(growable: false),
+      );
 });
 
 class InspectionDraft {
@@ -342,26 +382,65 @@ final inventoryFilterProvider =
   (ref) => InventoryFilterController(),
 );
 
-final filteredInventoryProvider = Provider<List<InventoryItem>>((ref) {
+typedef InventoryFetcher = Future<List<InventoryItem>> Function();
+
+final inventoryFetcherProvider = Provider<InventoryFetcher>(
+  (ref) => () async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    return DummyData.inventoryItems;
+  },
+);
+
+final inventoryProvider =
+    AsyncNotifierProvider<InventoryController, List<InventoryItem>>(
+  InventoryController.new,
+);
+
+class InventoryController extends AsyncNotifier<List<InventoryItem>> {
+  @override
+  Future<List<InventoryItem>> build() async {
+    final sync = ref.watch(syncStatusProvider);
+    if (sync.isOffline) {
+      throw StateError('Inventory is unavailable while offline.');
+    }
+    return ref.watch(inventoryFetcherProvider)();
+  }
+
+  Future<void> fetch() async {
+    state = const AsyncLoading<List<InventoryItem>>();
+    final sync = ref.read(syncStatusProvider);
+    state = await AsyncValue.guard(() async {
+      if (sync.isOffline) {
+        throw StateError('Inventory is unavailable while offline.');
+      }
+      return ref.read(inventoryFetcherProvider)();
+    });
+  }
+}
+
+final filteredInventoryProvider =
+    Provider<AsyncValue<List<InventoryItem>>>((ref) {
   final filter = ref.watch(inventoryFilterProvider);
   final query = filter.query.trim().toLowerCase();
   final levels = DummyData.stockLevels;
-  final items = DummyData.inventoryItems.where((item) {
-    final itemLocations =
-        levels.where((level) => level.itemId == item.id).toList();
-    final matchesQuery = query.isEmpty ||
-        item.sku.toLowerCase().contains(query) ||
-        item.name.toLowerCase().contains(query) ||
-        itemLocations
-            .any((level) => level.locationId.toLowerCase().contains(query));
-    return matchesQuery && (!filter.lowStockOnly || isLowStock(item, levels));
-  }).toList();
-  items.sort((a, b) {
-    final aLow = isLowStock(a, levels) ? 0 : 1;
-    final bLow = isLowStock(b, levels) ? 0 : 1;
-    return aLow != bLow ? aLow.compareTo(bLow) : a.sku.compareTo(b.sku);
+  return ref.watch(inventoryProvider).whenData((records) {
+    final items = records.where((item) {
+      final itemLocations =
+          levels.where((level) => level.itemId == item.id).toList();
+      final matchesQuery = query.isEmpty ||
+          item.sku.toLowerCase().contains(query) ||
+          item.name.toLowerCase().contains(query) ||
+          itemLocations
+              .any((level) => level.locationId.toLowerCase().contains(query));
+      return matchesQuery && (!filter.lowStockOnly || isLowStock(item, levels));
+    }).toList();
+    items.sort((a, b) {
+      final aLow = isLowStock(a, levels) ? 0 : 1;
+      final bLow = isLowStock(b, levels) ? 0 : 1;
+      return aLow != bLow ? aLow.compareTo(bLow) : a.sku.compareTo(b.sku);
+    });
+    return items;
   });
-  return items;
 });
 
 class ActivityController extends StateNotifier<List<ActivityEntry>> {
