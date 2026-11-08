@@ -12,7 +12,6 @@ dependencies:
     sdk: flutter
 
   # --- Used from day one ---
-  mobile_scanner: ^6.0.2        # barcode / QR scanning (Scan tab)
   image_picker: ^1.1.2          # defect photos (Inspection form)
   flutter_riverpod: ^2.6.1      # state management (swap dummy data for providers)
 

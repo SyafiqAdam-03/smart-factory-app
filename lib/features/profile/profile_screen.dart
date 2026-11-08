@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_factory_qc/app/sync_status.dart';
 import 'package:smart_factory_qc/core/theme/app_colors.dart';
 import 'package:smart_factory_qc/core/theme/app_theme.dart';
 import 'package:smart_factory_qc/core/widgets/section_label.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, required this.syncStatus, required this.onSignOut});
+class ProfileScreen extends ConsumerWidget {
+  const ProfileScreen({super.key, required this.onSignOut});
 
-  final SyncStatus syncStatus;
   final VoidCallback onSignOut;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncStatus = ref.watch(syncStatusProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: ListView(
@@ -37,20 +38,17 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.s16),
-          // Demo-only switch so the offline banner can be previewed. Remove
-          // once connectivity_plus drives SyncStatus.
           Card(
-            child: ListenableBuilder(
-              listenable: syncStatus,
-              builder: (_, __) => SwitchListTile(
-                value: syncStatus.isOffline,
-                onChanged: syncStatus.setOffline,
-                thumbColor: const WidgetStatePropertyAll(AppColors.white),
-                activeTrackColor: AppColors.quarantined,
-                title: const Text('Simulate offline', style: AppTextStyles.bodyStrong),
-                subtitle: const Text('Demo only', style: AppTextStyles.caption),
-                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.s16),
-              ),
+            child: SwitchListTile(
+              value: syncStatus.isOffline,
+              onChanged: ref.read(syncStatusProvider.notifier).setOffline,
+              thumbColor: const WidgetStatePropertyAll(AppColors.white),
+              activeTrackColor: AppColors.quarantined,
+              title: const Text('Simulate offline',
+                  style: AppTextStyles.bodyStrong),
+              subtitle: const Text('Demo only', style: AppTextStyles.caption),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.s16),
             ),
           ),
           const SizedBox(height: AppSpacing.s24),

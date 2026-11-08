@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:smart_factory_qc/core/theme/app_colors.dart';
 import 'package:smart_factory_qc/core/theme/app_theme.dart';
 
-/// Stand-in for screens that are built in the next iteration
-/// (Scan, Deliveries, Inspection form, Trace search).
+/// Stand-in for screens that are not yet part of the production workflow.
 class PlaceholderScreen extends StatelessWidget {
   const PlaceholderScreen({
     super.key,

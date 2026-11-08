@@ -9,6 +9,8 @@ class InventoryItem {
     required this.unit,
     required this.reorderLevel,
     required this.targetLevel,
+    this.supplier = 'Northworks Supply',
+    this.specifications = 'Standard production material',
   });
 
   final String id;
@@ -21,6 +23,8 @@ class InventoryItem {
 
   /// Full-bar reference for the stock-level bar (configuration, not stock).
   final double targetLevel;
+  final String supplier;
+  final String specifications;
 }
 
 /// Quantity of one item at one location.

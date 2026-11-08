@@ -24,17 +24,17 @@ class AppColors {
   static const Color slate900 = Color(0xFF0F172A);
 
   // Status: passed
-  static const Color passed = Color(0xFF16A34A);
-  static const Color passedText = Color(0xFF15803D);
+  static const Color passed = Color(0xFF22C55E);
+  static const Color passedText = Color(0xFF22C55E);
   static const Color passedSoft = Color(0xFFDCFCE7);
 
   // Status: quarantined (safety orange)
-  static const Color quarantined = Color(0xFFEA580C);
-  static const Color quarantinedText = Color(0xFFC2410C);
+  static const Color quarantined = Color(0xFFF97316);
+  static const Color quarantinedText = Color(0xFFF97316);
   static const Color quarantinedSoft = Color(0xFFFFEDD5);
 
   // Status: failed / defect
-  static const Color failed = Color(0xFFDC2626);
-  static const Color failedText = Color(0xFFB91C1C);
+  static const Color failed = Color(0xFFEF4444);
+  static const Color failedText = Color(0xFFEF4444);
   static const Color failedSoft = Color(0xFFFEE2E2);
 }

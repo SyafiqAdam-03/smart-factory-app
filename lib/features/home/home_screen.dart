@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_factory_qc/app/sync_status.dart';
 import 'package:smart_factory_qc/core/theme/app_colors.dart';
 import 'package:smart_factory_qc/core/theme/app_theme.dart';
 import 'package:smart_factory_qc/core/utils/format.dart';
@@ -8,26 +10,26 @@ import 'package:smart_factory_qc/data/dummy_data.dart';
 import 'package:smart_factory_qc/domain/models/activity_entry.dart';
 import 'package:smart_factory_qc/domain/models/batch_status.dart';
 import 'package:smart_factory_qc/domain/stock_calculator.dart';
+import 'package:smart_factory_qc/features/inspections/production_inspection_screen.dart';
+import 'package:smart_factory_qc/features/shared/providers/app_state.dart';
+import 'package:smart_factory_qc/core/widgets/offline_banner.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({
-    super.key,
-    required this.onScan,
-    required this.onNewInspection,
-  });
-
-  final VoidCallback onScan;
-  final VoidCallback onNewInspection;
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final deliveries = DummyData.deliveries;
-    final toReview = deliveries.where((d) => d.needsReview).length;
-    final quarantined =
-        deliveries.where((d) => d.status == BatchStatus.quarantined).length;
-    final lowStock = DummyData.inventoryItems
-        .where((i) => isLowStock(i, DummyData.stockLevels))
+  Widget build(BuildContext context, WidgetRef ref) {
+    final deliveries = ref.watch(deliveryRepositoryProvider);
+    final toReview =
+        deliveries.where((delivery) => delivery.needsReview).length;
+    final quarantined = deliveries
+        .where((delivery) => delivery.status == BatchStatus.quarantined)
         .length;
+    final lowStock = DummyData.inventoryItems
+        .where((item) => isLowStock(item, DummyData.stockLevels))
+        .length;
+    final activity = ref.watch(activityProvider);
+    final sync = ref.watch(syncStatusProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,26 +38,39 @@ class HomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            Text('Home'),
+            SizedBox(height: 2),
             Text(
-              'SHIFT A  ·  LINE 2',
+              'NORTHWORKS • ASSEMBLY PLANT 01',
               style: TextStyle(
                 fontFamily: 'Inter',
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
-                color: AppColors.slate400,
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0.3,
+                color: AppColors.slate300,
               ),
             ),
-            SizedBox(height: 2),
-            Text('Good morning, A. Rahman'),
           ],
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.s16),
         children: [
-          const SectionLabel('Today'),
-          const SizedBox(height: AppSpacing.s8),
+          if (sync.isOffline || sync.isSyncing) ...[
+            OfflineBanner(
+              pendingRecords: sync.pendingRecords,
+              isSyncing: sync.isSyncing,
+              onTap: () => ref.read(syncStatusProvider.notifier).sync(),
+            ),
+            const SizedBox(height: AppSpacing.s12),
+          ],
+          Text('Good morning, Asha', style: AppTextStyles.title),
+          const SizedBox(height: AppSpacing.s4),
+          Text(
+            'Sun, 18 Oct 2026 • Shift A • 06:00–14:00',
+            style: AppTextStyles.caption.copyWith(fontSize: 12),
+          ),
+          const SizedBox(height: AppSpacing.s12),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -64,8 +79,15 @@ class HomeScreen extends StatelessWidget {
                   child: _SummaryTile(
                     label: 'Deliveries to review',
                     value: toReview,
-                    color: AppColors.accent,
-                    icon: Icons.local_shipping_outlined,
+                    color: AppColors.slate900,
+                    onTap: () {
+                      ref
+                          .read(deliveryFilterProvider.notifier)
+                          .showNeedsReview();
+                      ref
+                          .read(activeTabProvider.notifier)
+                          .select(AppTab.deliveries);
+                    },
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s8),
@@ -74,7 +96,14 @@ class HomeScreen extends StatelessWidget {
                     label: 'Quarantined batches',
                     value: quarantined,
                     color: AppColors.quarantinedText,
-                    icon: Icons.warning_amber_rounded,
+                    onTap: () {
+                      ref
+                          .read(deliveryFilterProvider.notifier)
+                          .showQuarantined();
+                      ref
+                          .read(activeTabProvider.notifier)
+                          .select(AppTab.deliveries);
+                    },
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s8),
@@ -82,56 +111,45 @@ class HomeScreen extends StatelessWidget {
                   child: _SummaryTile(
                     label: 'Low-stock items',
                     value: lowStock,
-                    color: AppColors.failedText,
-                    icon: Icons.inventory_2_outlined,
+                    color: AppColors.slate900,
+                    onTap: () {
+                      ref.read(inventoryFilterProvider.notifier).showLowStock();
+                      ref
+                          .read(activeTabProvider.notifier)
+                          .select(AppTab.inventory);
+                    },
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s24),
-          const SectionLabel('Quick actions'),
-          const SizedBox(height: AppSpacing.s8),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: AppSpacing.primaryButtonHeight,
-                  child: FilledButton.icon(
-                    onPressed: onScan,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('Scan barcode'),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s8),
-              Expanded(
-                child: SizedBox(
-                  height: AppSpacing.primaryButtonHeight,
-                  child: OutlinedButton.icon(
-                    onPressed: onNewInspection,
-                    icon: const Icon(Icons.fact_check_outlined),
-                    label: const Text('New inspection'),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.s24),
-          const SectionLabel('Recent activity'),
-          const SizedBox(height: AppSpacing.s8),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                for (var i = 0; i < DummyData.activity.length; i++) ...[
-                  if (i > 0) const Divider(),
-                  _ActivityRow(entry: DummyData.activity[i]),
-                ],
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.s16),
+          const SectionLabel('Quick actions'),
+          const SizedBox(height: AppSpacing.s8),
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: () => _showNewInspection(context),
+              icon: const Icon(Icons.assignment_add, size: 20),
+              label: const Text('New inspection'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s16),
+          const SectionLabel('Recent activity'),
+          const SizedBox(height: AppSpacing.s8),
+          for (var index = 0; index < activity.length; index++) ...[
+            if (index > 0) const SizedBox(height: AppSpacing.s8),
+            _ActivityCard(
+              entry: activity[index],
+              onTap: () => _showActivityDetails(context, activity[index]),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.s12),
+          Text(
+            'Last synced 09:40 • All records up to date',
+            style: AppTextStyles.caption.copyWith(fontSize: 11),
+          ),
+          const SizedBox(height: AppSpacing.s8),
         ],
       ),
     );
@@ -143,30 +161,41 @@ class _SummaryTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
-    required this.icon,
+    required this.onTap,
   });
 
   final String label;
   final int value;
   final Color color;
-  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: '$label: $value',
-      excludeSemantics: true,
-      child: Card(
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.s12),
+          padding: const EdgeInsets.all(AppSpacing.s8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 20, color: color),
+              Text(
+                value.toString().padLeft(2, '0'),
+                style: AppTextStyles.bigNumber.copyWith(
+                  fontSize: 26,
+                  color: color,
+                ),
+              ),
               const SizedBox(height: AppSpacing.s8),
-              Text('$value', style: AppTextStyles.bigNumber.copyWith(color: color)),
-              const SizedBox(height: AppSpacing.s4),
-              SectionLabel(label, maxLines: 2),
+              Text(
+                label,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.slate700,
+                  fontSize: 10,
+                  height: 1.25,
+                ),
+              ),
             ],
           ),
         ),
@@ -175,51 +204,113 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.entry});
+class _ActivityCard extends StatelessWidget {
+  const _ActivityCard({required this.entry, required this.onTap});
 
   final ActivityEntry entry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 64),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s16,
-          vertical: AppSpacing.s12,
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: statusBackground(entry.status),
-                borderRadius: BorderRadius.circular(AppSpacing.radius),
-              ),
-              child: Icon(
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.s12,
+            vertical: AppSpacing.s8,
+          ),
+          child: Row(
+            children: [
+              Icon(
                 statusIcon(entry.status),
-                size: 22,
                 color: statusForeground(entry.status),
+                size: 20,
               ),
-            ),
-            const SizedBox(width: AppSpacing.s12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(entry.title, style: AppTextStyles.bodyStrong),
-                  const SizedBox(height: 2),
-                  Text(entry.reference, style: AppTextStyles.mono),
-                ],
+              const SizedBox(width: AppSpacing.s8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.title,
+                      style: AppTextStyles.bodyStrong.copyWith(fontSize: 13),
+                    ),
+                    const SizedBox(height: AppSpacing.s4),
+                    Text(
+                      entry.reference,
+                      style: AppTextStyles.caption.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.s8),
-            Text(formatAgo(entry.minutesAgo), style: AppTextStyles.caption),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+void _showActivityDetails(BuildContext context, ActivityEntry entry) {
+  final delivery = DummyData.deliveries
+      .where((item) => entry.title.contains(item.batchNumber))
+      .firstOrNull;
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius:
+          BorderRadius.vertical(top: Radius.circular(AppSpacing.radius)),
+    ),
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.s24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(entry.title,
+                      style: AppTextStyles.title.copyWith(fontSize: 20)),
+                ),
+                StatusBadge(entry.status),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s16),
+            Text(entry.reference, style: AppTextStyles.body),
+            if (delivery != null) ...[
+              const SizedBox(height: AppSpacing.s12),
+              Text(
+                '${delivery.supplier} • ${delivery.material} • '
+                '${formatQty(delivery.quantity)} ${delivery.unit}',
+                style: AppTextStyles.caption,
+              ),
+              const SizedBox(height: AppSpacing.s8),
+              Text(delivery.inspectionNotes, style: AppTextStyles.caption),
+            ],
+            const SizedBox(height: AppSpacing.s16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+void _showNewInspection(BuildContext context) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => const ProductionInspectionScreen(),
+    ),
+  );
 }

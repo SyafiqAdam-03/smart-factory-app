@@ -15,7 +15,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: SmartFactoryApp()));
 
     expect(find.text('Smart Factory'), findsOneWidget);
-    expect(find.text('Quality & Inventory'), findsOneWidget);
+    expect(find.text('QUALITY & INVENTORY'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
   });
 }
